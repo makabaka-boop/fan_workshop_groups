@@ -5,6 +5,7 @@ import { useStyles } from '../composables/useStyles';
 import { useGroups } from '../composables/useGroups';
 import { useFilter } from '../composables/useFilter';
 import { useAlerts } from '../composables/useAlerts';
+import { useMaterialEstimation } from '../composables/useMaterialEstimation';
 import type { FanStyle, DifficultyLevel, StyleStatus } from '../types';
 
 import ActivityHeader from '../components/ActivityHeader.vue';
@@ -40,7 +41,16 @@ const {
   clearFilters
 } = useFilter(styles);
 
-const { alerts } = useAlerts(styles.value, groups.value, activity.value);
+const { alerts } = useAlerts(
+  () => styles.value,
+  () => groups.value,
+  () => activity.value
+);
+
+const { globalMaterialSummary, totalShortageKinds, totalMaterialKinds } = useMaterialEstimation(
+  () => groups.value,
+  () => styles.value
+);
 
 const activeTab = ref<'styles' | 'groups'>('styles');
 
@@ -53,14 +63,6 @@ const assignedDuration = computed(() => {
   return styles.value
     .filter(s => assignedIds.has(s.id))
     .reduce((sum, s) => sum + s.duration, 0);
-});
-
-const totalMaterials = computed(() => {
-  const materialNames = new Set<string>();
-  styles.value.forEach(style => {
-    style.materials.forEach(m => materialNames.add(m.name));
-  });
-  return materialNames.size;
 });
 
 const handleAddStyle = () => {
@@ -196,8 +198,10 @@ const handleQuickEditStyle = (styleId: string, updates: Partial<FanStyle>) => {
       :total-people="totalPeopleInGroups"
       :total-duration="activity.totalDuration"
       :assigned-duration="assignedDuration"
-      :total-materials="totalMaterials"
+      :total-materials="totalMaterialKinds"
       :alerts="alerts"
+      :global-material-summary="globalMaterialSummary"
+      :total-shortage-kinds="totalShortageKinds"
     />
   </div>
 </template>
