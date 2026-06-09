@@ -5,6 +5,7 @@ import { useStyles } from '../composables/useStyles';
 import { useGroups } from '../composables/useGroups';
 import { useFilter } from '../composables/useFilter';
 import { useAlerts } from '../composables/useAlerts';
+import { useGroupMaterials } from '../composables/useGroupMaterials';
 import type { FanStyle, DifficultyLevel, StyleStatus } from '../types';
 
 import ActivityHeader from '../components/ActivityHeader.vue';
@@ -41,6 +42,13 @@ const {
 } = useFilter(styles);
 
 const { alerts } = useAlerts(styles.value, groups.value, activity.value);
+
+const {
+  groupMaterialSummaries,
+  overallMaterialShortage,
+  totalShortageCount,
+  totalNoDataCount
+} = useGroupMaterials();
 
 const activeTab = ref<'styles' | 'groups'>('styles');
 
@@ -181,6 +189,7 @@ const handleQuickEditStyle = (styleId: string, updates: Partial<FanStyle>) => {
           :groups="groups"
           :styles="styles"
           :unassigned-styles="unassignedStyles"
+          :group-material-summaries="groupMaterialSummaries"
           @add-group="handleAddGroup"
           @update-group="updateGroup"
           @delete-group="deleteGroup"
@@ -198,6 +207,9 @@ const handleQuickEditStyle = (styleId: string, updates: Partial<FanStyle>) => {
       :assigned-duration="assignedDuration"
       :total-materials="totalMaterials"
       :alerts="alerts"
+      :overall-material-shortage="overallMaterialShortage"
+      :total-shortage-count="totalShortageCount"
+      :total-no-data-count="totalNoDataCount"
     />
   </div>
 </template>
