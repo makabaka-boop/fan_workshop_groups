@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { Users, Clock, Package, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-vue-next';
+import { Users, Clock, Package, Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle2 } from 'lucide-vue-next';
 import type { Group, FanStyle } from '../types';
+import { useMaterialEstimation } from '../composables/useMaterialEstimation';
 
 interface Props {
   groups: Group[];
@@ -19,6 +20,11 @@ interface Emits {
 
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
+
+const { groupMaterialEstimates } = useMaterialEstimation(
+  () => props.groups,
+  () => props.styles
+);
 
 const expandedGroups = ref<Set<string>>(new Set());
 
@@ -40,20 +46,8 @@ const getGroupTotalDuration = (group: Group) => {
   return getGroupStyles(group).reduce((sum, s) => sum + s.duration, 0);
 };
 
-const getGroupMaterials = (group: Group) => {
-  const materialMap = new Map<string, { name: string; quantity: number; unit: string }>();
-  getGroupStyles(group).forEach(style => {
-    style.materials.forEach(m => {
-      const key = `${m.name}-${m.unit}`;
-      const existing = materialMap.get(key);
-      if (existing) {
-        existing.quantity += m.quantity;
-      } else {
-        materialMap.set(key, { ...m });
-      }
-    });
-  });
-  return Array.from(materialMap.values());
+const getGroupEstimate = (groupId: string) => {
+  return groupMaterialEstimates.value.find(e => e.groupId === groupId);
 };
 
 const selectStyleForAssignment = ref<string | null>(null);
@@ -84,6 +78,7 @@ const cancelAssign = () => {
       <h2 class="text-lg font-semibold text-gray-800 flex items-center gap-2">
         <Users class="w-5 h-5 text-green-600" />
         分组执行表
+        <span class="text-xs font-normal text-gray-500 ml-2">材料预估按小组人数自动汇总</span>
       </h2>
       <button
         @click="emit('addGroup')"
@@ -106,19 +101,19 @@ const cancelAssign = () => {
       >
         <div class="bg-gradient-to-r from-green-50 to-emerald-50 px-4 py-3">
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-4">
+            <div class="flex items-center gap-4 flex-wrap">
               <input
                 :value="group.name"
                 @input="emit('updateGroup', group.id, { name: ($event.target as HTMLInputElement).value })"
                 type="text"
                 class="font-semibold text-gray-800 bg-transparent border-b border-transparent focus:border-green-500 outline-none"
               />
-              <div class="flex items-center gap-4 text-sm text-gray-600">
+              <div class="flex items-center gap-4 text-sm text-gray-600 flex-wrap">
                 <span class="flex items-center gap-1">
                   <Users class="w-4 h-4" />
                   <input
                     :value="group.peopleCount"
-                    @input="emit('updateGroup', group.id, { peopleCount: Number(($event.target as HTMLInputElement).value) })"
+                    @input="emit('updateGroup', group.id, { peopleCount: Math.max(1, Number(($event.target as HTMLInputElement).value) || 1) })"
                     type="number"
                     min="1"
                     class="w-12 text-center bg-white/50 rounded px-1"
@@ -131,10 +126,24 @@ const cancelAssign = () => {
                 </span>
                 <span class="flex items-center gap-1">
                   <Package class="w-4 h-4" />
-                  {{ getGroupMaterials(group).length }} 种材料
+                  {{ getGroupEstimate(group.id)?.totalKinds ?? 0 }} 种材料
                 </span>
                 <span class="text-green-600 font-medium">
                   {{ group.styleIds.length }} 个样式
+                </span>
+                <span
+                  v-if="getGroupEstimate(group.id)?.hasShortage"
+                  class="flex items-center gap-1 text-red-600 font-medium bg-red-50 px-2 py-0.5 rounded-full"
+                >
+                  <AlertTriangle class="w-3.5 h-3.5" />
+                  {{ getGroupEstimate(group.id)?.shortageKinds }} 项缺口
+                </span>
+                <span
+                  v-else-if="getGroupEstimate(group.id) && getGroupEstimate(group.id)!.totalKinds > 0"
+                  class="flex items-center gap-1 text-green-700 font-medium bg-green-100 px-2 py-0.5 rounded-full"
+                >
+                  <CheckCircle2 class="w-3.5 h-3.5" />
+                  材料充足
                 </span>
               </div>
             </div>
@@ -178,7 +187,7 @@ const cancelAssign = () => {
                 >
                   <option value="">选择样式...</option>
                   <option v-for="style in unassignedStyles" :key="style.id" :value="style.id">
-                    {{ style.name }}
+                    {{ style.name }}（{{ style.suitablePeople }}人/{{ style.duration }}分钟）
                   </option>
                 </select>
                 <button
@@ -208,7 +217,7 @@ const cancelAssign = () => {
               >
                 <div>
                   <span class="font-medium text-gray-800">{{ style.name }}</span>
-                  <span class="text-sm text-gray-500 ml-2">({{ style.duration }}分钟)</span>
+                  <span class="text-sm text-gray-500 ml-2">({{ style.suitablePeople }}人/{{ style.duration }}分钟)</span>
                 </div>
                 <button
                   @click="emit('removeStyle', group.id, style.id)"
@@ -220,18 +229,77 @@ const cancelAssign = () => {
             </div>
           </div>
 
-          <div v-if="getGroupStyles(group).length > 0">
+          <div v-if="getGroupEstimate(group.id) && getGroupEstimate(group.id)!.materials.length > 0">
             <div class="border-t border-gray-200 pt-4">
-              <h4 class="text-sm font-medium text-gray-700 mb-2">材料清单汇总</h4>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div
-                  v-for="mat in getGroupMaterials(group)"
-                  :key="`${mat.name}-${mat.unit}`"
-                  class="text-sm p-2 bg-amber-50 rounded"
-                >
-                  <span class="font-medium text-amber-800">{{ mat.name }}</span>
-                  <span class="text-amber-600 ml-1">{{ mat.quantity }}{{ mat.unit }}</span>
-                </div>
+              <h4 class="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
+                <Package class="w-4 h-4 text-amber-600" />
+                材料清单预估
+                <span class="text-xs font-normal text-gray-400">
+                  （按 {{ group.peopleCount }} 人 × 样式套数计算）
+                </span>
+              </h4>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-gray-500 border-b border-gray-200">
+                      <th class="pb-2 pr-3 font-medium">材料名称</th>
+                      <th class="pb-2 px-3 font-medium text-center">总需求量</th>
+                      <th class="pb-2 px-3 font-medium text-center">可用库存</th>
+                      <th class="pb-2 pl-3 font-medium text-center">缺口</th>
+                      <th class="pb-2 pl-3 font-medium">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr
+                      v-for="mat in getGroupEstimate(group.id)!.materials"
+                      :key="`${mat.name}-${mat.unit}`"
+                      class="border-b border-gray-100 last:border-0"
+                      :class="mat.sufficient ? '' : 'bg-red-50/50'"
+                    >
+                      <td class="py-2 pr-3">
+                        <div class="font-medium text-gray-800">{{ mat.name }}</div>
+                        <div class="text-xs text-gray-400">来自：{{ mat.fromStyles.join('、') }}</div>
+                      </td>
+                      <td class="py-2 px-3 text-center font-semibold text-gray-700">
+                        {{ mat.required }}{{ mat.unit }}
+                      </td>
+                      <td class="py-2 px-3 text-center">
+                        <span v-if="mat.available > 0" class="text-gray-600">
+                          {{ mat.available }}{{ mat.unit }}
+                        </span>
+                        <span v-else class="text-gray-400 italic">未登记</span>
+                      </td>
+                      <td class="py-2 pl-3 text-center font-semibold">
+                        <span v-if="!mat.sufficient" class="text-red-600">
+                          缺 {{ mat.gap }}{{ mat.unit }}
+                        </span>
+                        <span v-else class="text-green-600">—</span>
+                      </td>
+                      <td class="py-2 pl-3">
+                        <span
+                          v-if="!mat.sufficient"
+                          class="inline-flex items-center gap-1 text-xs font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full"
+                        >
+                          <AlertTriangle class="w-3 h-3" />
+                          不足
+                        </span>
+                        <span
+                          v-else-if="mat.available === 0"
+                          class="inline-flex items-center gap-1 text-xs font-medium text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full"
+                        >
+                          待确认
+                        </span>
+                        <span
+                          v-else
+                          class="inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full"
+                        >
+                          <CheckCircle2 class="w-3 h-3" />
+                          充足
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

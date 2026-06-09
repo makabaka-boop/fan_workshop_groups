@@ -2,11 +2,14 @@ import { computed } from 'vue';
 import type { Alert, FanStyle, Group, ActivityInfo } from '../types';
 
 export function useAlerts(
-  styles: FanStyle[],
-  groups: Group[],
-  activity: ActivityInfo
+  getStyles: () => FanStyle[],
+  getGroups: () => Group[],
+  getActivity: () => ActivityInfo
 ) {
   const alerts = computed<Alert[]>(() => {
+    const styles = getStyles();
+    const groups = getGroups();
+    const activity = getActivity();
     const result: Alert[] = [];
 
     groups.forEach(group => {
