@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { Palette, Users, Clock, Package, AlertTriangle, CheckCircle } from 'lucide-vue-next';
-import type { Alert } from '../types';
+import { Palette, Users, Clock, Package, AlertTriangle, CheckCircle, AlertOctagon } from 'lucide-vue-next';
+import type { Alert, AllMaterialSummary } from '../types';
 
 interface Props {
   totalStyles: number;
@@ -10,9 +10,11 @@ interface Props {
   assignedDuration: number;
   totalMaterials: number;
   alerts: Alert[];
+  materialShortageCount?: number;
+  allMaterialsSummary?: AllMaterialSummary[];
 }
 
-defineProps<Props>();
+const props = defineProps<Props>();
 
 const formatDuration = (minutes: number) => {
   const hours = Math.floor(minutes / 60);
@@ -64,6 +66,14 @@ const formatDuration = (minutes: number) => {
             <span class="text-sm">
               <span class="font-semibold text-lg">{{ totalMaterials }}</span>
               <span class="text-gray-400 ml-1">种材料</span>
+              <span v-if="materialShortageCount && materialShortageCount > 0" class="text-red-400 ml-2">
+                <AlertOctagon class="w-4 h-4 inline mr-1" />
+                <span class="font-semibold">{{ materialShortageCount }}</span> 种缺口
+              </span>
+              <span v-else class="text-green-400 ml-2">
+                <CheckCircle class="w-4 h-4 inline mr-1" />
+                充足
+              </span>
             </span>
           </div>
         </div>

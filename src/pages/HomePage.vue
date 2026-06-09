@@ -5,6 +5,7 @@ import { useStyles } from '../composables/useStyles';
 import { useGroups } from '../composables/useGroups';
 import { useFilter } from '../composables/useFilter';
 import { useAlerts } from '../composables/useAlerts';
+import { useMaterials } from '../composables/useMaterials';
 import type { FanStyle, DifficultyLevel, StyleStatus } from '../types';
 
 import ActivityHeader from '../components/ActivityHeader.vue';
@@ -41,6 +42,13 @@ const {
 } = useFilter(styles);
 
 const { alerts } = useAlerts(styles.value, groups.value, activity.value);
+
+const {
+  getAllMaterialsSummary,
+  totalMaterialTypes,
+  shortageMaterialCount,
+  hasMaterialShortage
+} = useMaterials(groups.value, styles.value);
 
 const activeTab = ref<'styles' | 'groups'>('styles');
 
@@ -198,6 +206,8 @@ const handleQuickEditStyle = (styleId: string, updates: Partial<FanStyle>) => {
       :assigned-duration="assignedDuration"
       :total-materials="totalMaterials"
       :alerts="alerts"
+      :material-shortage-count="shortageMaterialCount"
+      :all-materials-summary="getAllMaterialsSummary"
     />
   </div>
 </template>
