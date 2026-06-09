@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import { Users, Clock, Package, Plus, Trash2, ChevronDown, ChevronUp } from 'lucide-vue-next';
-import type { Group, FanStyle } from '../types';
+import { Users, Clock, Package, Plus, Trash2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle } from 'lucide-vue-next';
+import type { Group, FanStyle, GroupMaterialItem } from '../types';
 
 interface Props {
   groups: Group[];
@@ -20,6 +20,70 @@ interface Emits {
 const props = defineProps<Props>();
 const emit = defineEmits<Emits>();
 
+const getStyleById = (id: string) => {
+  return props.styles.find(s => s.id === id);
+};
+
+const getGroupStyles = (group: Group) => {
+  return group.styleIds
+    .map(id => getStyleById(id))
+    .filter((s): s is FanStyle => s !== undefined);
+};
+
+const getGroupMaterials = (group: Group): GroupMaterialItem[] => {
+  const materialMap = new Map<string, GroupMaterialItem>();
+  const groupStyles = getGroupStyles(group);
+  const peopleCount = group.peopleCount;
+
+  groupStyles.forEach(style => {
+    style.materials.forEach(m => {
+      const key = `${m.name}-${m.unit}`;
+      const quantityForStyle = m.quantity * peopleCount;
+      const available = m.available ?? 0;
+
+      if (materialMap.has(key)) {
+        const existing = materialMap.get(key)!;
+        existing.totalRequired += quantityForStyle;
+        existing.styleBreakdown.push({
+          styleId: style.id,
+          styleName: style.name,
+          quantityPerStyle: m.quantity,
+          totalForStyle: quantityForStyle
+        });
+      } else {
+        materialMap.set(key, {
+          id: m.id,
+          name: m.name,
+          unit: m.unit,
+          totalRequired: quantityForStyle,
+          available: available,
+          shortage: Math.max(0, quantityForStyle - available),
+          isSufficient: quantityForStyle <= available,
+          styleBreakdown: [{
+            styleId: style.id,
+            styleName: style.name,
+            quantityPerStyle: m.quantity,
+            totalForStyle: quantityForStyle
+          }]
+        });
+      }
+    });
+  });
+
+  const result = Array.from(materialMap.values());
+  result.forEach(m => {
+    m.shortage = Math.max(0, m.totalRequired - m.available);
+    m.isSufficient = m.totalRequired <= m.available;
+  });
+
+  return result.sort((a, b) => {
+    if (a.isSufficient !== b.isSufficient) {
+      return a.isSufficient ? 1 : -1;
+    }
+    return b.shortage - a.shortage;
+  });
+};
+
 const expandedGroups = ref<Set<string>>(new Set());
 
 const toggleGroup = (groupId: string) => {
@@ -30,30 +94,13 @@ const toggleGroup = (groupId: string) => {
   }
 };
 
-const getGroupStyles = (group: Group) => {
-  return group.styleIds
-    .map(id => props.styles.find(s => s.id === id))
-    .filter((s): s is FanStyle => s !== undefined);
-};
-
 const getGroupTotalDuration = (group: Group) => {
   return getGroupStyles(group).reduce((sum, s) => sum + s.duration, 0);
 };
 
-const getGroupMaterials = (group: Group) => {
-  const materialMap = new Map<string, { name: string; quantity: number; unit: string }>();
-  getGroupStyles(group).forEach(style => {
-    style.materials.forEach(m => {
-      const key = `${m.name}-${m.unit}`;
-      const existing = materialMap.get(key);
-      if (existing) {
-        existing.quantity += m.quantity;
-      } else {
-        materialMap.set(key, { ...m });
-      }
-    });
-  });
-  return Array.from(materialMap.values());
+const getGroupShortageCount = (group: Group) => {
+  const materials = getGroupMaterials(group);
+  return materials.filter(m => !m.isSufficient).length;
 };
 
 const selectStyleForAssignment = ref<string | null>(null);
@@ -132,6 +179,14 @@ const cancelAssign = () => {
                 <span class="flex items-center gap-1">
                   <Package class="w-4 h-4" />
                   {{ getGroupMaterials(group).length }} 种材料
+                </span>
+                <span v-if="getGroupShortageCount(group) > 0" class="flex items-center gap-1 text-red-500 font-medium">
+                  <AlertTriangle class="w-4 h-4" />
+                  {{ getGroupShortageCount(group) }} 种缺口
+                </span>
+                <span v-else class="flex items-center gap-1 text-green-600 font-medium">
+                  <CheckCircle class="w-4 h-4" />
+                  材料充足
                 </span>
                 <span class="text-green-600 font-medium">
                   {{ group.styleIds.length }} 个样式
@@ -222,15 +277,68 @@ const cancelAssign = () => {
 
           <div v-if="getGroupStyles(group).length > 0">
             <div class="border-t border-gray-200 pt-4">
-              <h4 class="text-sm font-medium text-gray-700 mb-2">材料清单汇总</h4>
-              <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
-                <div
-                  v-for="mat in getGroupMaterials(group)"
-                  :key="`${mat.name}-${mat.unit}`"
-                  class="text-sm p-2 bg-amber-50 rounded"
-                >
-                  <span class="font-medium text-amber-800">{{ mat.name }}</span>
-                  <span class="text-amber-600 ml-1">{{ mat.quantity }}{{ mat.unit }}</span>
+              <h4 class="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                <Package class="w-4 h-4 text-purple-500" />
+                材料清单预估（按{{ group.peopleCount }}人计算）
+              </h4>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead>
+                    <tr class="bg-gray-50">
+                      <th class="text-left px-3 py-2 font-medium text-gray-600 rounded-l-lg">材料名称</th>
+                      <th class="text-center px-3 py-2 font-medium text-gray-600">单位用量</th>
+                      <th class="text-center px-3 py-2 font-medium text-gray-600">总需求量</th>
+                      <th class="text-center px-3 py-2 font-medium text-gray-600">可用量</th>
+                      <th class="text-center px-3 py-2 font-medium text-gray-600 rounded-r-lg">缺口</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    <tr
+                      v-for="mat in getGroupMaterials(group)"
+                      :key="`${mat.name}-${mat.unit}`"
+                      :class="mat.isSufficient ? '' : 'bg-red-50'"
+                    >
+                      <td class="px-3 py-2 font-medium text-gray-800">
+                        <div class="flex items-center gap-2">
+                          <AlertTriangle v-if="!mat.isSufficient" class="w-4 h-4 text-red-500" />
+                          <CheckCircle v-else class="w-4 h-4 text-green-500" />
+                          {{ mat.name }}
+                        </div>
+                      </td>
+                      <td class="px-3 py-2 text-center text-gray-600">
+                        <span v-for="(bd, idx) in mat.styleBreakdown" :key="bd.styleId" class="block text-xs">
+                          {{ bd.styleName }}: {{ bd.quantityPerStyle }}{{ mat.unit }}
+                        </span>
+                      </td>
+                      <td class="px-3 py-2 text-center font-semibold text-blue-600">
+                        {{ mat.totalRequired }}{{ mat.unit }}
+                      </td>
+                      <td class="px-3 py-2 text-center text-gray-600">
+                        {{ mat.available }}{{ mat.unit }}
+                      </td>
+                      <td class="px-3 py-2 text-center">
+                        <span v-if="mat.shortage > 0" class="font-semibold text-red-500">
+                          缺{{ mat.shortage }}{{ mat.unit }}
+                        </span>
+                        <span v-else class="text-green-600 font-medium">
+                          充足
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div v-if="getGroupShortageCount(group) > 0" class="mt-3 p-3 bg-red-50 rounded-lg border border-red-200">
+                <div class="flex items-start gap-2">
+                  <AlertTriangle class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p class="text-sm font-medium text-red-800">
+                      注意：该组有 {{ getGroupShortageCount(group) }} 种材料缺口
+                    </p>
+                    <p class="text-xs text-red-600 mt-1">
+                      请及时补充材料或调整分配方案
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>

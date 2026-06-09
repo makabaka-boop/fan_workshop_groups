@@ -62,3 +62,33 @@ export interface FilterCriteria {
   maxPeople?: number;
   status?: StyleStatus;
 }
+
+export interface GroupMaterialItem {
+  id: string;
+  name: string;
+  unit: string;
+  totalRequired: number;
+  available: number;
+  shortage: number;
+  isSufficient: boolean;
+  styleBreakdown: {
+    styleId: string;
+    styleName: string;
+    quantityPerStyle: number;
+    totalForStyle: number;
+  }[];
+}
+
+export interface AllMaterialSummary {
+  name: string;
+  unit: string;
+  totalRequired: number;
+  totalAvailable: number;
+  totalShortage: number;
+  isSufficient: boolean;
+  groupBreakdown: {
+    groupId: string;
+    groupName: string;
+    required: number;
+  }[];
+}
