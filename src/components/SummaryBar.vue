@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Palette, Users, Clock, Package, AlertTriangle, CheckCircle } from 'lucide-vue-next';
+import { Palette, Users, Clock, Package, AlertTriangle, CheckCircle, PackageX } from 'lucide-vue-next';
 import type { Alert } from '../types';
+import type { GroupMaterialNeed } from '../composables/useMaterials';
 
 interface Props {
   totalStyles: number;
@@ -10,9 +11,16 @@ interface Props {
   assignedDuration: number;
   totalMaterials: number;
   alerts: Alert[];
+  materialShortageCount?: number;
+  materialTotalShortage?: number;
+  materialShortageItems?: GroupMaterialNeed[];
 }
 
-defineProps<Props>();
+withDefaults(defineProps<Props>(), {
+  materialShortageCount: 0,
+  materialTotalShortage: 0,
+  materialShortageItems: () => []
+});
 
 const formatDuration = (minutes: number) => {
   const hours = Math.floor(minutes / 60);
@@ -65,6 +73,24 @@ const formatDuration = (minutes: number) => {
               <span class="font-semibold text-lg">{{ totalMaterials }}</span>
               <span class="text-gray-400 ml-1">种材料</span>
             </span>
+          </div>
+
+          <div
+            v-if="materialShortageCount > 0"
+            class="flex items-center gap-2 group relative"
+            :title="materialShortageItems.map(m => `${m.name} 缺${m.shortage}${m.unit}`).join('，')"
+          >
+            <PackageX class="w-5 h-5 text-red-400" />
+            <span class="text-sm">
+              <span class="font-semibold text-red-400">{{ materialShortageCount }}</span>
+              <span class="text-gray-400 ml-1">种缺口</span>
+              <span class="text-gray-500 mx-1">·</span>
+              <span class="text-red-300">缺 {{ materialTotalShortage }} 件</span>
+            </span>
+          </div>
+          <div v-else-if="totalGroups > 0" class="flex items-center gap-2">
+            <Package class="w-5 h-5 text-emerald-400" />
+            <span class="text-sm text-emerald-300">材料齐备</span>
           </div>
         </div>
 
